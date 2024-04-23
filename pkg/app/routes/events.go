@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"event_api/pkg/app/api/server"
+	"event_api/pkg/app/server"
 	"event_api/pkg/domain/event"
 	"event_api/pkg/internal/storage"
 	"fmt"

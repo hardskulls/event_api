@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"event_api/pkg/domain/event"
 	"event_api/pkg/domain/user"
+	//_ "github.com/ClickHouse/clickhouse-go"
 )
 
 // GetTypesWithEvents retrieves the event types that have more than the specified number of events.
@@ -163,35 +164,15 @@ func GetEventsByTime(
 }
 
 func CreateEvent(ctx context.Context, conn *sql.DB, e event.UnhandledEvent) error {
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	// Rollback is ignored if the tx has been committed later in the function
-	defer tx.Rollback()
-
-	stmt, err := conn.Prepare(`SELECT max(eventID) FROM events;`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	var lastID int64
-	rows, err := stmt.Query()
-	if err != nil {
-		return err
-	}
-
-	err = rows.Scan(&lastID)
-	if err != nil {
-		return err
-	}
-
-	ev := event.New(lastID+1, e)
-	stmt, err = conn.Prepare(`
+	stmt, err := conn.Prepare(`
 		INSERT INTO events (eventID, eventType, userID, eventTime, payload)
-		VALUES (?, ?, ?, ?, ?);
+		SELECT
+		    COALESCE(MAX(eventID), 0) + 1,
+		    ?,
+		    ?,
+		    ?,
+		    ?
+		FROM events;
 	`)
 	if err != nil {
 		return err
@@ -199,15 +180,14 @@ func CreateEvent(ctx context.Context, conn *sql.DB, e event.UnhandledEvent) erro
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		ev.EventID,
-		ev.EventType,
-		ev.UserID,
-		ev.EventTime,
-		ev.Payload,
+		e.EventType,
+		e.UserID,
+		e.EventTime,
+		e.Payload,
 	)
 	if err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	return nil
 }

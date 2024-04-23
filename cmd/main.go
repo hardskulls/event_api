@@ -2,9 +2,9 @@ package main
 
 import (
 	"database/sql"
-	"event_api/pkg/app/api/routes"
-	"event_api/pkg/app/api/server"
-	"event_api/pkg/app/migrator"
+	"event_api/pkg/app/routes"
+	"event_api/pkg/app/server"
+	_ "github.com/ClickHouse/clickhouse-go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"log"
@@ -13,6 +13,17 @@ import (
 	"strconv"
 )
 
+const createEvent = `
+CREATE TABLE IF NOT EXISTS events (
+    eventID Int64,
+    eventType String,
+    userID Int64,
+    eventTime DateTime,
+    payload String
+) ENGINE = MergeTree
+ORDER BY (eventID, eventTime)
+`
+
 func main() {
 	port := os.Getenv("PORT")
 	p, err := strconv.Atoi(port)
@@ -20,16 +31,15 @@ func main() {
 		panic(err)
 	}
 
-	db, err := sql.Open("clickhouse", "tcp://localhost:9000?debug=true")
+	db, err := sql.Open("clickhouse", os.Getenv("DB_URL"))
 	if err != nil {
 		log.Fatalf("Failed to open ClickHouse connection: %v", err)
 	}
 	defer db.Close()
 
-	migrateApp := migrator.MustGetMigrator()
-	err = migrateApp.Up()
+	_, err = db.Exec(createEvent)
 	if err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Fatalf("Failed to create table: %v", err)
 	}
 
 	srv := server.New(p)
@@ -40,6 +50,6 @@ func main() {
 		return c.Next()
 	})
 
-	srv.Handle(http.MethodPost, "/api/events", routes.CreateEvent)
+	srv.Handle(http.MethodPost, "/api/event", routes.CreateEvent)
 	srv.MustRun()
 }
