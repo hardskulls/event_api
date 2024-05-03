@@ -15,16 +15,6 @@ type Config struct {
 	DB *sql.DB
 }
 
-type Route struct {
-	method  Method
-	path    Path
-	handler Handler
-}
-
-func NewRoute(method, path string, handler func(c *fiber.Ctx) error) Route {
-	return Route{method: method, path: path, handler: handler}
-}
-
 type Server struct {
 	port   Port
 	server *fiber.App
