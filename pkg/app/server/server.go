@@ -6,33 +6,37 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type AppHandler func(*Server, *fiber.Ctx) error
+type Port = int
+type Method = string
+type Path = string
 type Handler func(*fiber.Ctx) error
 
-func applyHandler(app *Server, f AppHandler) Handler {
-	res := func(ctx *fiber.Ctx) error {
-		return f(app, ctx)
-	}
-	return res
+type Config struct {
+	DB *sql.DB
+}
+
+type Route struct {
+	method  Method
+	path    Path
+	handler Handler
+}
+
+func NewRoute(method, path string, handler func(c *fiber.Ctx) error) Route {
+	return Route{method: method, path: path, handler: handler}
 }
 
 type Server struct {
-	port   int
+	port   Port
 	server *fiber.App
-	db     *sql.DB
 }
 
-func New(port int) *Server {
+func New(port Port) *Server {
 	app := fiber.New()
-	db, err := sql.Open("clickhouse", "tcp://localhost:9000?debug=true")
-	if err != nil {
-		panic(err)
-	}
-	return &Server{port: port, server: app, db: db}
+	return &Server{port: port, server: app}
 }
 
-func (s *Server) Handle(method, path string, f AppHandler) {
-	_ = s.server.Add(method, path, applyHandler(s, f))
+func (s *Server) Handle(m Method, p Path, h Handler) {
+	_ = s.server.Add(m, p, h)
 }
 
 func (s *Server) Add(arg interface{}) {

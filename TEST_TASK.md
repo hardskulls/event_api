@@ -50,4 +50,3 @@ POST /api/event
 }
 ```
 
-

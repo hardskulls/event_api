@@ -1,55 +1,45 @@
 package main
 
 import (
-	"database/sql"
-	"event_api/pkg/app/routes"
+	"event_api/pkg/app/app"
 	"event_api/pkg/app/server"
 	_ "github.com/ClickHouse/clickhouse-go"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
+	"log/slog"
 )
 
-const createEvent = `
-CREATE TABLE IF NOT EXISTS events (
-    eventID Int64,
-    eventType String,
-    userID Int64,
-    eventTime DateTime,
-    payload String
-) ENGINE = MergeTree
-ORDER BY (eventID, eventTime)
-`
-
 func main() {
-	port := os.Getenv("PORT")
-	p, err := strconv.Atoi(port)
+	l, _ := app.InitLogger()
+	log := l.With(slog.String("fn", "main"))
+
+	log.Info("Getting env vars...")
+	port, dbUrl, migrationsPath, err := app.GetFromEnv(
+		log, "PORT", "CLICKHOUSE_URL", "PATH_TO_MIGRATIONS",
+	)
 	if err != nil {
-		panic(err)
+		log.Error("Failed to get one or more env variables", slog.String("error", err.Error()))
+		return
 	}
 
-	db, err := sql.Open("clickhouse", os.Getenv("DB_URL"))
+	log.Info("Connecting to database...")
+	db, err := app.PrepareDB("clickhouse", dbUrl)
 	if err != nil {
-		log.Fatalf("Failed to open ClickHouse connection: %v", err)
-	}
-	defer db.Close()
-
-	_, err = db.Exec(createEvent)
-	if err != nil {
-		log.Fatalf("Failed to create table: %v", err)
+		log.Error("Failed to open the database", slog.String("error", err.Error()))
+		return
 	}
 
-	srv := server.New(p)
+	log.Info("Running migrations...")
+	if err = app.RunMigrations(db, nil, migrationsPath); err != nil {
+		log.Error("Failed to run migrations", slog.String("error", err.Error()))
+		return
+	}
 
-	srv.Add(logger.New())
-	srv.Add(func(c *fiber.Ctx) error {
-		c.Locals("db", db)
-		return c.Next()
-	})
+	log.Info("Initializing server...")
+	srv := server.New(port)
 
-	srv.Handle(http.MethodPost, "/api/event", routes.CreateEvent)
+	app.AddMiddleware(srv, server.Config{DB: db})
+
+	app.AddRoutes(srv)
+
+	log.Info("Starting server.")
 	srv.MustRun()
 }
