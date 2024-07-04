@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/ClickHouse/clickhouse-go v1.5.4
-	github.com/gofiber/fiber/v2 v2.52.4
+	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/pressly/goose/v3 v3.20.0
 )
 
